@@ -4,22 +4,48 @@ use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     if pattern == "\\d" {
-        input_line.chars().any(|x| x.is_numeric())
+        digit(input_line)
     } else if pattern == "\\w" {
-        input_line
-            .chars()
-            .any(|x| x.is_ascii_alphanumeric() || x == '_')
+        word_characters(input_line)
+    } else if pattern.starts_with("[^") && pattern.ends_with("]") {
+        negative_character_group(input_line, pattern)
     } else if pattern.starts_with("[") && pattern.ends_with("]") {
-        let pattern: Vec<String> = pattern
-            .replace("[", "")
-            .replace("]", "")
-            .split("")
-            .map(|x| x.to_string())
-            .collect();
-        input_line.chars().any(|x| pattern.contains(&x.to_string()))
+        positive_character_group(input_line, pattern)
     } else {
         input_line.contains(pattern)
     }
+}
+
+fn digit(input_line: &str) -> bool {
+    input_line.chars().any(|x| x.is_numeric())
+}
+
+fn word_characters(input_line: &str) -> bool {
+    input_line
+        .chars()
+        .any(|x| x.is_ascii_alphanumeric() || x == '_')
+}
+
+fn positive_character_group(input_line: &str, pattern: &str) -> bool {
+    let pattern: Vec<String> = pattern
+        .replace("[", "")
+        .replace("]", "")
+        .split("")
+        .map(|x| x.to_string())
+        .collect();
+    input_line.chars().any(|x| pattern.contains(&x.to_string()))
+}
+
+fn negative_character_group(input_line: &str, pattern: &str) -> bool {
+    let pattern: Vec<String> = pattern
+        .replace("[^", "")
+        .replace("]", "")
+        .split("")
+        .map(|x| x.to_string())
+        .collect();
+    input_line
+        .chars()
+        .any(|x| !pattern.contains(&x.to_string()))
 }
 
 fn main() {
