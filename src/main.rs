@@ -3,13 +3,21 @@ use std::io;
 use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    let mut temp_pattern = pattern.to_string();
+    let mut pattern = pattern.to_string();
     let anchor = pattern.starts_with("^");
     if anchor {
-        temp_pattern.remove(0);
+        pattern.remove(0);
+    }
+    let end_anchor = pattern.ends_with("$");
+    if end_anchor {
+        pattern.remove(pattern.len() - 1);
     }
 
-    for c in input_line.chars() {
+    let mut temp_pattern = pattern.to_string();
+    println!("{}", end_anchor);
+
+    for (i, c) in input_line.chars().enumerate() {
+        println!("{}, {}, len{}", temp_pattern, i, input_line.len());
         if temp_pattern.starts_with("\\d") && digit(&c) {
             temp_pattern = temp_pattern.replacen("\\d", "", 1);
         } else if temp_pattern.starts_with("\\w") && word_characters(&c) {
@@ -23,7 +31,11 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
             temp_pattern = pattern.to_string();
         }
 
-        if temp_pattern.is_empty() {
+        if temp_pattern.is_empty() && end_anchor && i == input_line.len() - 1 {
+            return true;
+        }
+
+        if temp_pattern.is_empty() && !end_anchor {
             return true;
         }
     }
