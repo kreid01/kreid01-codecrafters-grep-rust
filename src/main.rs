@@ -5,6 +5,10 @@ use std::process;
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     if pattern == "\\d" {
         input_line.chars().any(|x| x.is_numeric())
+    } else if pattern == "\\w" {
+        input_line
+            .chars()
+            .any(|x| x.is_ascii_alphanumeric() || x == '_')
     } else {
         input_line.contains(pattern)
     }
