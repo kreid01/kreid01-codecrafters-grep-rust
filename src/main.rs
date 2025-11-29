@@ -9,6 +9,14 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         input_line
             .chars()
             .any(|x| x.is_ascii_alphanumeric() || x == '_')
+    } else if pattern.starts_with("[") && pattern.ends_with("]") {
+        let pattern: Vec<String> = pattern
+            .replace("[", "")
+            .replace("]", "")
+            .split("")
+            .map(|x| x.to_string())
+            .collect();
+        input_line.chars().any(|x| pattern.contains(&x.to_string()))
     } else {
         input_line.contains(pattern)
     }
