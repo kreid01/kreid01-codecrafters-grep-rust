@@ -4,10 +4,12 @@ use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let mut temp_pattern = pattern.to_string();
+    let anchor = pattern.starts_with("^");
+    if anchor {
+        temp_pattern.remove(0);
+    }
 
     for c in input_line.chars() {
-        println!("{}, c:{}", temp_pattern, c);
-
         if temp_pattern.starts_with("\\d") && digit(&c) {
             temp_pattern = temp_pattern.replacen("\\d", "", 1);
         } else if temp_pattern.starts_with("\\w") && word_characters(&c) {
@@ -15,6 +17,9 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         } else if temp_pattern.starts_with(&c.to_string()) {
             temp_pattern = temp_pattern.replacen(&c.to_string(), "", 1);
         } else {
+            if anchor {
+                return false;
+            }
             temp_pattern = pattern.to_string();
         }
 
