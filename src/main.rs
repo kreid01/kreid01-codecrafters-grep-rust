@@ -3,10 +3,10 @@ use std::io;
 use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    if pattern.chars().count() == 1 {
-        input_line.contains(pattern)
+    if pattern == "\\d" {
+        input_line.chars().any(|x| x.is_numeric())
     } else {
-        panic!("Unhandled pattern: {}", pattern)
+        input_line.contains(pattern)
     }
 }
 
