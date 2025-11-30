@@ -33,16 +33,6 @@ pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
         let mut temp_greed_symbol: &str = "\\n";
         let temp_c = &c.to_string();
 
-        let nth = temp_pattern.split("").nth(2).unwrap_or_default();
-
-        if nth == "?" {
-            temp_pattern = temp_pattern.replacen("?", "", 1);
-            let char = temp_pattern.split("").nth(1).unwrap_or_default();
-            if c.to_string() != char {
-                temp_pattern = temp_pattern.replacen(char, "", 1);
-            }
-        }
-
         //matching
         if temp_pattern.starts_with("\\d") && digit(&c) {
             temp_pattern = temp_pattern.replacen("\\d", "", 1);
@@ -62,6 +52,11 @@ pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
             }
 
             temp_pattern = pattern.to_string();
+        }
+
+        if temp_pattern.split("").nth(1).unwrap_or_default() == "?" {
+            temp_pattern = temp_pattern.replacen("?", "", 1);
+            temp_pattern = temp_pattern.replacen(c, "", 1)
         }
 
         if temp_pattern.starts_with("+") {
