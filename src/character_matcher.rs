@@ -1,93 +1,103 @@
-pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    let mut pattern = pattern.to_string();
-    let anchor = pattern.starts_with("^");
-    if anchor {
-        pattern.remove(0);
-    }
-    let end_anchor = pattern.ends_with("$");
-    if end_anchor {
-        pattern.remove(pattern.len() - 1);
+#[derive(Debug)]
+pub enum Token {
+    StartAnchor,
+    EndAnchor,
+    Literal(char),
+    AnyChar,
+    Digit,
+    Word,
+    Sequence(Vec<Token>),
+    Quantified { atom: Box<Token>, kind: Quantifier },
+}
+
+#[derive(Debug)]
+pub enum Quantifier {
+    OneOrMore,
+    ZeroOrOne,
+    None,
+}
+
+pub fn lexer(pattern: &str) -> Vec<Token> {
+    let mut tokens: Vec<Token> = Vec::new();
+
+    let mut pattern = pattern.chars().peekable();
+    while let Some(token) = pattern.next() {
+        let token = match token {
+            _ if token == '\\' => {
+                if let Some(next_token) = pattern.next() {
+                    match next_token {
+                        _ if next_token == 'w' => Token::Word,
+                        _ if next_token == 'd' => Token::Digit,
+                        _ => Token::Word,
+                    };
+                }
+
+                Token::Literal(token)
+            }
+            _ if token == '^' => Token::StartAnchor,
+            _ if token == '$' => Token::EndAnchor,
+            _ if token == '.' => Token::AnyChar,
+            _ if token == '+' => Token::Quantified {
+                atom: Box::new(tokens.pop().unwrap()),
+                kind: Quantifier::OneOrMore,
+            },
+            _ if token == '?' => Token::Quantified {
+                atom: Box::new(tokens.pop().unwrap()),
+                kind: Quantifier::ZeroOrOne,
+            },
+            _ => Token::Literal(token),
+        };
+
+        tokens.push(token);
     }
 
-    let mut temp_pattern = pattern.to_string();
-    let mut greed = false;
-    let mut greed_symbol = "\\n".to_owned();
+    tokens
+}
+
+pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
+    let mut tokens = lexer(pattern);
 
     let mut chars = input_line.chars().peekable();
 
     while let Some(c) = chars.next() {
-        println!("char: {}, pattern:{}", c, temp_pattern);
-        //greed
-        if let Some(&next) = chars.peek()
-            && greed
-            && match_symbol(&greed_symbol, next)
-        {
-            continue;
-        } else if greed && match_symbol(&greed_symbol, c) {
-            temp_pattern = temp_pattern.replace(c, "");
-            continue;
-        } else {
-            greed = false;
-        }
+        println!("char: {}, toks{:?}", c, tokens);
+        if let Some(token) = tokens.first() {
+            let matched = match_token(token, c, &Quantifier::None);
 
-        let mut temp_greed_symbol: &str = "\\n";
-        let temp_c = &c.to_string();
-
-        let nth = temp_pattern.split("").nth(2).unwrap_or_default();
-
-        if nth == "?" {
-            temp_pattern = temp_pattern.replacen("?", "", 1);
-            let char = temp_pattern.split("").nth(1).unwrap_or_default();
-            if c.to_string() != char {
-                temp_pattern = temp_pattern.replacen(char, "", 1);
+            if matched {
+                tokens.remove(0);
             }
-        }
-
-        //matching
-        if temp_pattern.starts_with("\\d") && digit(&c) {
-            temp_pattern = temp_pattern.replacen("\\d", "", 1);
-            temp_greed_symbol = "\\d";
-        } else if temp_pattern.starts_with("\\w") && word_characters(&c) {
-            temp_pattern = temp_pattern.replacen("\\w", "", 1);
-            temp_greed_symbol = "\\w";
-        } else if temp_pattern.starts_with(&c.to_string()) {
-            temp_pattern = temp_pattern.replacen(&c.to_string(), "", 1);
-            temp_greed_symbol = temp_c;
-            if temp_pattern.starts_with("?") {
-                temp_pattern = temp_pattern.replacen("?", "", 1);
-            }
-        } else {
-            if anchor {
-                return false;
-            }
-
-            temp_pattern = pattern.to_string();
-        }
-
-        if temp_pattern.starts_with("+") {
-            greed = true;
-            greed_symbol = temp_greed_symbol.to_string();
-            temp_pattern = temp_pattern.replacen("+", "", 1);
-        }
-
-        if temp_pattern.is_empty() && end_anchor && chars.next().is_none() {
-            return true;
-        }
-
-        if temp_pattern.is_empty() && !end_anchor {
-            return true;
         }
     }
 
-    false
+    tokens.is_empty()
 }
 
-fn match_symbol(pattern: &str, c: char) -> bool {
-    match pattern {
-        _ if pattern == "\\d" => digit(&c),
-        _ if pattern == "\\w" => word_characters(&c),
-        _ => c.to_string() == pattern,
+fn match_token(token: &Token, c: char, q: &Quantifier) -> bool {
+    let quantifier = match q {
+        Quantifier::ZeroOrOne => true,
+        Quantifier::OneOrMore => true,
+        Quantifier::None => false,
+    };
+
+    if quantifier {
+        return true;
     }
+
+    match token {
+        Token::Digit => digit(&c),
+        Token::Word => word_characters(&c),
+        Token::AnyChar => any_char(&c),
+        Token::Literal(s) => &c == s,
+        Token::Quantified { atom, kind } => match_token(atom, c, kind),
+        Token::EndAnchor => true,
+        Token::StartAnchor => true,
+        _ => false,
+    }
+}
+
+fn any_char(char: &char) -> bool {
+    char != &'\n'
 }
 
 fn digit(char: &char) -> bool {
