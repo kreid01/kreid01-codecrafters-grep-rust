@@ -1,4 +1,6 @@
-#[derive(Debug)]
+use std::collections::VecDeque;
+
+#[derive(Debug, Clone)]
 pub enum Token {
     StartAnchor,
     EndAnchor,
@@ -10,7 +12,7 @@ pub enum Token {
     Quantified { atom: Box<Token>, kind: Quantifier },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Quantifier {
     OneOrMore,
     ZeroOrOne,
@@ -54,42 +56,134 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
     tokens
 }
 
-pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    let mut tokens = lexer(pattern);
+pub fn grep(input: &str, pattern: &str) -> bool {
+    let tokens = lexer(pattern);
+    let chars: Vec<char> = input.chars().collect();
 
-    let mut chars = input_line.chars().peekable();
+    for start_pos in 0..=chars.len() {
+        let mut pos = start_pos;
+        if match_pattern(&chars, tokens.clone(), &mut pos) {
+            return true;
+        }
+    }
 
-    while let Some(c) = chars.next() {
-        println!("char: {}, toks{:?}", c, tokens);
-        if let Some(token) = tokens.first() {
-            let matched = match_token(token, c, &Quantifier::None);
+    false
+}
 
-            if matched {
-                tokens.remove(0);
+pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> bool {
+    let mut tokens: VecDeque<Token> = VecDeque::from(tokens);
+
+    while let Some(token) = tokens.front() {
+        let tokens_after: Vec<Token> = tokens.iter().skip(1).cloned().collect();
+        let tokens_after_slice: &[Token] = &tokens_after;
+
+        match token {
+            Token::Quantified { atom, kind } => {
+                match match_quantified(chars, atom, kind, pos, tokens_after_slice) {
+                    Ok(()) => {
+                        return tokens_after_slice.is_empty() || *pos <= chars.len();
+                    }
+                    Err(_) => return false,
+                }
+            }
+
+            _ => {
+                let c = match chars.get(*pos) {
+                    Some(c) => c,
+                    None => return false,
+                };
+
+                if match_token(token, c) {
+                    *pos += 1;
+                    tokens.pop_front();
+                } else {
+                    return false;
+                }
             }
         }
     }
 
-    tokens.is_empty()
+    true
 }
 
-fn match_token(token: &Token, c: char, q: &Quantifier) -> bool {
-    let quantifier = match q {
-        Quantifier::ZeroOrOne => true,
-        Quantifier::OneOrMore => true,
-        Quantifier::None => false,
-    };
+fn match_quantified(
+    chars: &[char],
+    atom: &Token,
+    kind: &Quantifier,
+    pos: &mut usize,
+    tokens_after: &[Token],
+) -> Result<(), ()> {
+    match kind {
+        Quantifier::OneOrMore => match_one_or_more(chars, atom, pos, tokens_after),
+        Quantifier::ZeroOrOne => match_zero_or_one(chars, atom, pos, tokens_after),
+        Quantifier::None => Err(()),
+    }
+}
 
-    if quantifier {
-        return true;
+fn match_one_or_more(
+    chars: &[char],
+    token: &Token,
+    pos: &mut usize,
+    tokens_after: &[Token],
+) -> Result<(), ()> {
+    let start_pos = *pos;
+    while let Some(&c) = chars.get(*pos) {
+        if !match_token(token, &c) {
+            break;
+        }
+        *pos += 1;
+    }
+    if *pos == start_pos {
+        return Err(());
     }
 
+    if tokens_after.is_empty() {
+        return Ok(());
+    }
+
+    for trial_pos in (start_pos + 1..=*pos).rev() {
+        let mut temp_pos = trial_pos;
+        if match_pattern(chars, tokens_after.to_vec(), &mut temp_pos) {
+            *pos = temp_pos;
+            return Ok(());
+        }
+    }
+    Err(())
+}
+
+fn match_zero_or_one(
+    chars: &[char],
+    token: &Token,
+    pos: &mut usize,
+    tokens_after: &[Token],
+) -> Result<(), ()> {
+    if *pos >= chars.len() {
+        return Ok(());
+    }
+
+    if match_token(token, &chars[*pos]) {
+        let mut temp_pos = *pos + 1;
+        if tokens_after.is_empty() || match_pattern(chars, tokens_after.to_vec(), &mut temp_pos) {
+            *pos = temp_pos;
+            return Ok(());
+        }
+    }
+
+    let mut temp_pos = *pos;
+    if tokens_after.is_empty() || match_pattern(chars, tokens_after.to_vec(), &mut temp_pos) {
+        *pos = temp_pos;
+        return Ok(());
+    }
+
+    Err(())
+}
+
+fn match_token(token: &Token, c: &char) -> bool {
     match token {
-        Token::Digit => digit(&c),
-        Token::Word => word_characters(&c),
-        Token::AnyChar => any_char(&c),
-        Token::Literal(s) => &c == s,
-        Token::Quantified { atom, kind } => match_token(atom, c, kind),
+        Token::Digit => digit(c),
+        Token::Word => word_characters(c),
+        Token::AnyChar => any_char(c),
+        Token::Literal(s) => c == s,
         Token::EndAnchor => true,
         Token::StartAnchor => true,
         _ => false,
