@@ -25,17 +25,13 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
     let mut pattern = pattern.chars().peekable();
     while let Some(token) = pattern.next() {
         let token = match token {
-            _ if token == '\\' => {
-                if let Some(next_token) = pattern.next() {
-                    match next_token {
-                        _ if next_token == 'w' => Token::Word,
-                        _ if next_token == 'd' => Token::Digit,
-                        _ => Token::Word,
-                    }
-                } else {
-                    Token::Literal('\\')
-                }
-            }
+            _ => match (token, pattern.next()) {
+                ('\\', Some('w')) => Token::Word,
+                ('\\', Some('d')) => Token::Digit,
+                ('\\', Some(_)) => Token::Word,
+                (c, _) => Token::Literal(c),
+            },
+
             _ if token == '^' => Token::StartAnchor,
             _ if token == '$' => Token::EndAnchor,
             _ if token == '.' => Token::AnyChar,
@@ -57,39 +53,37 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
 }
 
 pub fn grep(input: &str, pattern: &str) -> bool {
-    let tokens = lexer(pattern);
+    let mut tokens = lexer(pattern);
     let chars: Vec<char> = input.chars().collect();
-
     for start_pos in 0..=chars.len() {
         let mut pos = start_pos;
-
-        let mut t = tokens.clone();
-        if let Some(Token::StartAnchor) = t.first() {
+        if let Some(first) = tokens.first()
+            && &Token::StartAnchor == first
+        {
             if pos > 0 {
                 continue;
+            } else {
+                tokens.remove(0);
             }
-            t.remove(0);
         }
-
-        if match_pattern(&chars, t, &mut pos) {
+        if match_pattern(&chars, tokens.clone(), &mut pos) {
             return true;
         }
     }
-
     false
 }
 
 pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> bool {
     let mut tokens: VecDeque<Token> = VecDeque::from(tokens);
 
+    println!("token:{:?}", tokens);
+
     while let Some(token) = tokens.front() {
+        println!("token:{:?},, char{:?}", token, chars);
         let tokens_after: Vec<Token> = tokens.iter().skip(1).cloned().collect();
         let tokens_after_slice: &[Token] = &tokens_after;
 
         match token {
-            Token::EndAnchor => {
-                return pos == &chars.len();
-            }
             Token::Quantified { atom, kind } => {
                 match match_quantified(chars, atom, kind, pos, tokens_after_slice) {
                     Ok(()) => {
@@ -191,6 +185,7 @@ fn match_zero_or_one(
 }
 
 fn match_token(token: &Token, c: &char) -> bool {
+    println!("{:?}, char:{}", token, c);
     match token {
         Token::Digit => digit(c),
         Token::Word => word_characters(c),
