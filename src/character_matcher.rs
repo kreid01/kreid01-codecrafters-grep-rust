@@ -98,9 +98,10 @@ pub fn get_alternator_token(pattern: &mut std::iter::Peekable<std::str::Chars<'_
     Token::Alternation(vec![])
 }
 
-pub fn grep(input: &str, pattern: &str) -> bool {
+pub fn grep(input: &str, pattern: &str) -> (bool, String) {
     let tokens = lexer(pattern);
     let chars: Vec<char> = input.chars().collect();
+    let mut matches = String::new();
 
     for start_pos in 0..=chars.len() {
         let mut pos = start_pos;
@@ -113,15 +114,20 @@ pub fn grep(input: &str, pattern: &str) -> bool {
             t.remove(0);
         }
 
-        if match_pattern(&chars, t, &mut pos) {
-            return true;
+        if match_pattern(&chars, t, &mut pos, &mut matches) {
+            return (true, matches);
         }
     }
 
-    false
+    (false, String::new())
 }
 
-pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> bool {
+pub fn match_pattern(
+    chars: &[char],
+    tokens: Vec<Token>,
+    pos: &mut usize,
+    matches: &mut String,
+) -> bool {
     let mut tokens: VecDeque<Token> = VecDeque::from(tokens);
 
     while let Some(token) = tokens.front() {
@@ -133,7 +139,7 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> boo
                 return pos == &chars.len();
             }
             Token::Quantified { atom, kind } => {
-                match match_quantified(chars, atom, kind, pos, tokens_after_slice) {
+                match match_quantified(chars, atom, kind, pos, tokens_after_slice, matches) {
                     Ok(()) => {
                         return tokens_after_slice.is_empty() || *pos <= chars.len();
                     }
@@ -146,12 +152,14 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> boo
                     Err(_) => return false,
                 }
             }
-            Token::Alternation(alt_tokens) => match match_alteration(alt_tokens, chars, pos) {
-                Ok(()) => {
-                    tokens.pop_front();
+            Token::Alternation(alt_tokens) => {
+                match match_alteration(alt_tokens, chars, pos, matches) {
+                    Ok(()) => {
+                        tokens.pop_front();
+                    }
+                    Err(_) => return false,
                 }
-                Err(_) => return false,
-            },
+            }
             _ => {
                 let c = match chars.get(*pos) {
                     Some(c) => c,
@@ -159,6 +167,7 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> boo
                 };
 
                 if match_token(token, c) {
+                    matches.push(c.to_owned());
                     *pos += 1;
                     tokens.pop_front();
                 } else {
@@ -187,13 +196,18 @@ fn match_sequence(tokens: &[Token], chars: &[char], negative: &bool) -> Result<(
     Err(())
 }
 
-fn match_alteration(token: &Vec<Token>, chars: &[char], pos: &mut usize) -> Result<(), ()> {
+fn match_alteration(
+    token: &Vec<Token>,
+    chars: &[char],
+    pos: &mut usize,
+    matches: &mut String,
+) -> Result<(), ()> {
     for option in token {
         match option {
             Token::AlternationOption(seq) => {
                 let mut tmp_pos = *pos;
 
-                match match_alternation_option(seq, chars, &mut tmp_pos) {
+                match match_alternation_option(seq, chars, &mut tmp_pos, matches) {
                     Ok(()) => {
                         *pos = tmp_pos;
                         return Ok(());
@@ -216,10 +230,14 @@ fn match_alternation_option(
     tokens: &Vec<Token>,
     chars: &[char],
     pos: &mut usize,
+    matches: &mut String,
 ) -> Result<(), ()> {
+    let mut word = String::new();
+
     for token in tokens {
         if let Some(char) = chars.get(*pos) {
             if match_token(token, char) {
+                word.push(char.to_owned());
                 *pos += 1;
             } else {
                 return Err(());
@@ -229,6 +247,7 @@ fn match_alternation_option(
         }
     }
 
+    matches.push_str(&word);
     Ok(())
 }
 
@@ -238,10 +257,11 @@ fn match_quantified(
     kind: &Quantifier,
     pos: &mut usize,
     tokens_after: &[Token],
+    matches: &mut String,
 ) -> Result<(), ()> {
     match kind {
-        Quantifier::OneOrMore => match_one_or_more(chars, atom, pos, tokens_after),
-        Quantifier::ZeroOrOne => match_zero_or_one(chars, atom, pos, tokens_after),
+        Quantifier::OneOrMore => match_one_or_more(chars, atom, pos, tokens_after, matches),
+        Quantifier::ZeroOrOne => match_zero_or_one(chars, atom, pos, tokens_after, matches),
         Quantifier::None => Err(()),
     }
 }
@@ -251,14 +271,21 @@ fn match_one_or_more(
     token: &Token,
     pos: &mut usize,
     tokens_after: &[Token],
+    matches: &mut String,
 ) -> Result<(), ()> {
+    let mut word = String::new();
     let start_pos = *pos;
+
     while let Some(&c) = chars.get(*pos) {
         if !match_token(token, &c) {
             break;
         }
+        word.push(chars[*pos]);
         *pos += 1;
     }
+
+    matches.push_str(&word);
+
     if *pos == start_pos {
         return Err(());
     }
@@ -269,7 +296,7 @@ fn match_one_or_more(
 
     for trial_pos in (start_pos + 1..=*pos).rev() {
         let mut temp_pos = trial_pos;
-        if match_pattern(chars, tokens_after.to_vec(), &mut temp_pos) {
+        if match_pattern(chars, tokens_after.to_vec(), &mut temp_pos, matches) {
             *pos = temp_pos;
             return Ok(());
         }
@@ -282,21 +309,37 @@ fn match_zero_or_one(
     token: &Token,
     pos: &mut usize,
     tokens_after: &[Token],
+    matches: &mut String,
 ) -> Result<(), ()> {
     if *pos >= chars.len() {
         return Ok(());
     }
 
+    let temp_matches = chars[*pos];
+
     if match_token(token, &chars[*pos]) {
         let mut temp_pos = *pos + 1;
-        if tokens_after.is_empty() || match_pattern(chars, tokens_after.to_vec(), &mut temp_pos) {
+        if tokens_after.is_empty()
+            || match_pattern(chars, tokens_after.to_vec(), &mut temp_pos, matches)
+        {
+            if tokens_after.is_empty() || matches!(tokens_after.first().unwrap(), Token::EndAnchor)
+            {
+                matches.push(temp_matches);
+            } else {
+                let prev = matches.pop().unwrap();
+                matches.push(temp_matches);
+                matches.push(prev);
+            }
+
             *pos = temp_pos;
             return Ok(());
         }
     }
 
     let mut temp_pos = *pos;
-    if tokens_after.is_empty() || match_pattern(chars, tokens_after.to_vec(), &mut temp_pos) {
+    if tokens_after.is_empty()
+        || match_pattern(chars, tokens_after.to_vec(), &mut temp_pos, matches)
+    {
         *pos = temp_pos;
         return Ok(());
     }

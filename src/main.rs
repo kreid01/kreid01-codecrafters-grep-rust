@@ -8,22 +8,34 @@ mod character_matcher;
 
 fn main() {
     eprintln!("Logs from your program will appear here!");
+    let mut e_index = 1;
+    let mut show_matches = false;
 
-    if env::args().nth(1).unwrap() != "-E" {
+    if env::args().nth(1).unwrap() == "-o" {
+        show_matches = true;
+        e_index = 2;
+    }
+
+    if env::args().nth(e_index).unwrap() != "-E" {
         println!("Expected first argument to be '-E'");
         process::exit(1);
     }
 
-    let pattern = env::args().nth(2).unwrap();
+    let pattern = env::args().nth(e_index + 1).unwrap();
     let stdin = io::stdin();
     let reader = BufReader::new(stdin.lock());
     let mut matched = false;
 
     for line in reader.lines() {
         let line = line.unwrap();
-        if character_matcher::grep(&line, &pattern) {
+        let (m, matches) = character_matcher::grep(&line, &pattern);
+        if m {
             matched = true;
-            println!("{}", line);
+            if show_matches {
+                println!("{}", matches);
+            } else {
+                println!("{}", line);
+            }
         }
     }
 
