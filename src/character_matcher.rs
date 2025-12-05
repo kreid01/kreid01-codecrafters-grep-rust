@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::str::Chars;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -172,7 +171,7 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> boo
     true
 }
 
-fn match_sequence(tokens: &Vec<Token>, chars: &[char], negative: &bool) -> Result<(), ()> {
+fn match_sequence(tokens: &[Token], chars: &[char], negative: &bool) -> Result<(), ()> {
     for char in chars {
         let char_in_class = tokens.iter().any(|token| match_token(token, char));
 
@@ -219,8 +218,12 @@ fn match_alternation_option(
     pos: &mut usize,
 ) -> Result<(), ()> {
     for token in tokens {
-        if match_token(token, &chars[*pos]) {
-            *pos += 1;
+        if let Some(char) = chars.get(*pos) {
+            if match_token(token, char) {
+                *pos += 1;
+            } else {
+                return Err(());
+            }
         } else {
             return Err(());
         }

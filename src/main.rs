@@ -1,5 +1,7 @@
 use std::env;
 use std::io;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::process;
 
 mod character_matcher;
@@ -13,12 +15,19 @@ fn main() {
     }
 
     let pattern = env::args().nth(2).unwrap();
-    let mut input_line = String::new();
+    let stdin = io::stdin();
+    let reader = BufReader::new(stdin.lock());
+    let mut matched = false;
 
-    io::stdin().read_line(&mut input_line).unwrap();
+    for line in reader.lines() {
+        let line = line.unwrap();
+        if character_matcher::grep(&line, &pattern) {
+            matched = true;
+            println!("{}", line);
+        }
+    }
 
-    if character_matcher::grep(&input_line, &pattern) {
-        println!("{}", input_line);
+    if matched {
         process::exit(0)
     } else {
         process::exit(1)
