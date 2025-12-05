@@ -2,7 +2,6 @@ use std::env;
 use std::io;
 use std::process;
 
-mod character_groups;
 mod character_matcher;
 
 fn main() {
@@ -17,9 +16,9 @@ fn main() {
     let mut input_line = String::new();
 
     io::stdin().read_line(&mut input_line).unwrap();
-    character_groups::check_character_groups(&input_line, &pattern);
 
     if character_matcher::grep(&input_line, &pattern) {
+        println!("{}", input_line);
         process::exit(0)
     } else {
         process::exit(1)

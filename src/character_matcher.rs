@@ -9,8 +9,9 @@ pub enum Token {
     AnyChar,
     Digit,
     Word,
-    Sequence(Vec<Token>),
+    Sequence(Vec<Token>, bool),
     Alternation(Vec<Token>),
+    AlternationOption(Vec<Token>),
     Quantified { atom: Box<Token>, kind: Quantifier },
 }
 
@@ -39,6 +40,7 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
                 }
             }
             _ if token == '(' => get_alternator_token(&mut pattern),
+            _ if token == '[' => get_sequence_token(&mut pattern),
             _ if token == '^' => Token::StartAnchor,
             _ if token == '$' => Token::EndAnchor,
             _ if token == '.' => Token::AnyChar,
@@ -59,6 +61,23 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
     tokens
 }
 
+pub fn get_sequence_token(pattern: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Token {
+    let mut word: Vec<Token> = Vec::new();
+    let mut negative = false;
+
+    for char in pattern.by_ref() {
+        match char {
+            '^' => {
+                negative = true;
+            }
+            ']' => return Token::Sequence(word, negative),
+            _ => word.push(Token::Literal(char)),
+        }
+    }
+
+    Token::Alternation(vec![])
+}
+
 pub fn get_alternator_token(pattern: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Token {
     let mut options: Vec<Token> = Vec::new();
     let mut word: Vec<Token> = Vec::new();
@@ -66,18 +85,18 @@ pub fn get_alternator_token(pattern: &mut std::iter::Peekable<std::str::Chars<'_
     for char in pattern.by_ref() {
         match char {
             '|' => {
-                options.push(Token::Sequence(word.clone()));
+                options.push(Token::AlternationOption(word.clone()));
                 word.clear();
             }
             ')' => {
-                options.push(Token::Sequence(word.clone()));
+                options.push(Token::AlternationOption(word.clone()));
                 return Token::Alternation(options);
             }
             _ => word.push(Token::Literal(char)),
         }
     }
 
-    Token::Alternation(vec![Token::Sequence(vec![])])
+    Token::Alternation(vec![])
 }
 
 pub fn grep(input: &str, pattern: &str) -> bool {
@@ -107,8 +126,6 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> boo
     let mut tokens: VecDeque<Token> = VecDeque::from(tokens);
 
     while let Some(token) = tokens.front() {
-        println!("{:?} chars:{:?} pos {}", tokens, chars, pos);
-
         let tokens_after: Vec<Token> = tokens.iter().skip(1).cloned().collect();
         let tokens_after_slice: &[Token] = &tokens_after;
 
@@ -121,6 +138,12 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> boo
                     Ok(()) => {
                         return tokens_after_slice.is_empty() || *pos <= chars.len();
                     }
+                    Err(_) => return false,
+                }
+            }
+            Token::Sequence(seq_tokens, negative) => {
+                match match_sequence(seq_tokens, chars, negative) {
+                    Ok(()) => return true,
                     Err(_) => return false,
                 }
             }
@@ -149,13 +172,29 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: &mut usize) -> boo
     true
 }
 
+fn match_sequence(tokens: &Vec<Token>, chars: &[char], negative: &bool) -> Result<(), ()> {
+    for char in chars {
+        let char_in_class = tokens.iter().any(|token| match_token(token, char));
+
+        if *negative {
+            if !char_in_class {
+                return Ok(());
+            }
+        } else if char_in_class {
+            return Ok(());
+        }
+    }
+
+    Err(())
+}
+
 fn match_alteration(token: &Vec<Token>, chars: &[char], pos: &mut usize) -> Result<(), ()> {
     for option in token {
         match option {
-            Token::Sequence(seq) => {
+            Token::AlternationOption(seq) => {
                 let mut tmp_pos = *pos;
 
-                match match_sequence(seq, chars, &mut tmp_pos) {
+                match match_alternation_option(seq, chars, &mut tmp_pos) {
                     Ok(()) => {
                         *pos = tmp_pos;
                         return Ok(());
@@ -174,7 +213,11 @@ fn match_alteration(token: &Vec<Token>, chars: &[char], pos: &mut usize) -> Resu
     Err(())
 }
 
-fn match_sequence(tokens: &Vec<Token>, chars: &[char], pos: &mut usize) -> Result<(), ()> {
+fn match_alternation_option(
+    tokens: &Vec<Token>,
+    chars: &[char],
+    pos: &mut usize,
+) -> Result<(), ()> {
     for token in tokens {
         if match_token(token, &chars[*pos]) {
             *pos += 1;
