@@ -32,7 +32,7 @@ fn main() {
         if !matches.is_empty() {
             matched = true;
             if show_matches {
-                println!("{}", matches.join("\n"));
+                println!("{}", matches);
             } else {
                 println!("{}", line);
             }
