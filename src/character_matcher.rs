@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::num::ParseIntError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -31,7 +32,7 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
                     match next_token {
                         _ if next_token == 'w' => Token::Word,
                         _ if next_token == 'd' => Token::Digit,
-                        _ => Token::Word,
+                        _ => Token::Literal('\\'),
                     }
                 } else {
                     Token::Literal('\\')
@@ -139,15 +140,38 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
         let tokens_after_slice: &[Token] = &tokens_after;
 
         match token {
-            Token::EndAnchor => return Some(pos),
+            Token::EndAnchor => {
+                if temp_pos == chars.len() {
+                    return Some(temp_pos);
+                } else {
+                    return None;
+                }
+            }
             Token::Quantified { atom, kind } => {
-                return match_quantified(chars, atom, kind, pos, tokens_after_slice);
+                if tokens_after_slice.is_empty() {
+                    return match_quantified(chars, atom, kind, temp_pos, tokens_after_slice);
+                }
+                if let Some(end_pos) =
+                    match_quantified(chars, atom, kind, temp_pos, tokens_after_slice)
+                {
+                    temp_pos = end_pos
+                }
             }
             Token::Sequence(seq_tokens, _negative) => {
-                return match_pattern(chars, seq_tokens.to_vec(), pos);
+                if tokens_after_slice.is_empty() {
+                    return match_pattern(chars, seq_tokens.to_vec(), temp_pos);
+                }
+                if let Some(end_pos) = match_pattern(chars, seq_tokens.to_vec(), temp_pos) {
+                    temp_pos = end_pos
+                }
             }
             Token::Alternation(alt_tokens) => {
-                return match_alteration(alt_tokens, chars, pos);
+                if tokens_after_slice.is_empty() {
+                    return match_alteration(alt_tokens, chars, temp_pos);
+                }
+                if let Some(end_pos) = match_alteration(alt_tokens, chars, temp_pos) {
+                    temp_pos = end_pos
+                }
             }
             _ => {
                 let c = chars.get(temp_pos)?;
@@ -196,19 +220,15 @@ fn match_one_or_more(
 ) -> Option<usize> {
     let mut start_pos = pos;
 
-    while let Some(&c) = chars.get(pos) {
+    while let Some(&c) = chars.get(start_pos) {
         if !match_token(token, &c) {
             break;
         }
         start_pos += 1;
     }
 
-    if pos == start_pos {
-        return None;
-    }
-
-    if tokens_after.is_empty() {
-        return Some(pos);
+    if start_pos != pos {
+        return Some(start_pos);
     }
 
     for trial_pos in (start_pos + 1..=pos).rev() {
@@ -231,16 +251,10 @@ fn match_zero_or_one(
     }
 
     if match_token(token, &chars[pos]) {
-        if tokens_after.is_empty() || matches!(tokens_after.first().unwrap(), Token::EndAnchor) {
-            return Some(pos);
-        }
-
-        if let Some(pos) = match_pattern(chars, tokens_after.to_vec(), pos + 1) {
-            return Some(pos);
-        }
+        return Some(pos + 1);
     }
 
-    if tokens_after.is_empty() {
+    if tokens_after.is_empty() || matches!(tokens_after.first().unwrap(), Token::EndAnchor) {
         return Some(pos);
     }
 
