@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::num::ParseIntError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -147,21 +146,31 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
                     return None;
                 }
             }
-            Token::Quantified { atom, kind } => {
+            Token::Quantified { atom, kind } => match kind {
+                Quantifier::OneOrMore => {
+                    return match_one_or_more(chars, atom, temp_pos, tokens_after_slice);
+                }
+                Quantifier::ZeroOrOne => {
+                    if tokens_after_slice.is_empty() {
+                        return match_zero_or_one(chars, atom, temp_pos, tokens_after_slice);
+                    }
+                    if let Some(end_pos) =
+                        match_zero_or_one(chars, atom, temp_pos, tokens_after_slice)
+                    {
+                        temp_pos = end_pos
+                    }
+                }
+                Quantifier::None => {
+                    return None;
+                }
+            },
+            Token::Sequence(seq_tokens, negative) => {
                 if tokens_after_slice.is_empty() {
-                    return match_quantified(chars, atom, kind, temp_pos, tokens_after_slice);
+                    return match_sequence(seq_tokens.to_vec(), chars, temp_pos, *negative);
                 }
                 if let Some(end_pos) =
-                    match_quantified(chars, atom, kind, temp_pos, tokens_after_slice)
+                    match_sequence(seq_tokens.to_vec(), chars, temp_pos, *negative)
                 {
-                    temp_pos = end_pos
-                }
-            }
-            Token::Sequence(seq_tokens, _negative) => {
-                if tokens_after_slice.is_empty() {
-                    return match_pattern(chars, seq_tokens.to_vec(), temp_pos);
-                }
-                if let Some(end_pos) = match_pattern(chars, seq_tokens.to_vec(), temp_pos) {
                     temp_pos = end_pos
                 }
             }
@@ -189,6 +198,31 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
     Some(temp_pos)
 }
 
+fn match_sequence(
+    seq_tokens: Vec<Token>,
+    chars: &[char],
+    start_pos: usize,
+    negative: bool,
+) -> Option<usize> {
+    let c = chars.get(start_pos)?;
+
+    if negative {
+        for token in seq_tokens {
+            if match_token(&token, c) {
+                return None;
+            }
+        }
+        Some(start_pos + 1)
+    } else {
+        for token in seq_tokens {
+            if match_token(&token, c) {
+                return Some(start_pos + 1);
+            }
+        }
+        None
+    }
+}
+
 fn match_alteration(alt_tokens: &[Vec<Token>], chars: &[char], start_pos: usize) -> Option<usize> {
     for branch in alt_tokens {
         if let Some(end_pos) = match_pattern(chars, branch.to_vec(), start_pos) {
@@ -198,42 +232,32 @@ fn match_alteration(alt_tokens: &[Vec<Token>], chars: &[char], start_pos: usize)
     None
 }
 
-fn match_quantified(
-    chars: &[char],
-    atom: &Token,
-    kind: &Quantifier,
-    pos: usize,
-    tokens_after: &[Token],
-) -> Option<usize> {
-    match kind {
-        Quantifier::OneOrMore => match_one_or_more(chars, atom, pos, tokens_after),
-        Quantifier::ZeroOrOne => match_zero_or_one(chars, atom, pos, tokens_after),
-        Quantifier::None => None,
-    }
-}
-
 fn match_one_or_more(
     chars: &[char],
     token: &Token,
     pos: usize,
     tokens_after: &[Token],
 ) -> Option<usize> {
-    let mut start_pos = pos;
+    let mut end = pos;
 
-    while let Some(&c) = chars.get(start_pos) {
+    while let Some(&c) = chars.get(end) {
         if !match_token(token, &c) {
             break;
         }
-        start_pos += 1;
+        end += 1;
     }
 
-    if start_pos != pos {
-        return Some(start_pos);
+    if end == pos {
+        return None;
     }
 
-    for trial_pos in (start_pos + 1..=pos).rev() {
-        if let Some(pos) = match_pattern(chars, tokens_after.to_vec(), trial_pos) {
-            return Some(pos);
+    if end != pos && tokens_after.is_empty() {
+        return Some(end);
+    }
+
+    for candidate in (pos..=end).rev() {
+        if let Some(next_pos) = match_pattern(chars, tokens_after.to_vec(), candidate) {
+            return Some(next_pos);
         }
     }
 
@@ -258,7 +282,7 @@ fn match_zero_or_one(
         return Some(pos);
     }
 
-    if let Some(pos) = match_pattern(chars, tokens_after.to_vec(), pos) {
+    if let Some(pos) = match_pattern(chars, tokens_after.to_vec(), pos + 1) {
         return Some(pos);
     }
 
