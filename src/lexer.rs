@@ -17,7 +17,7 @@ pub enum Quantifier {
     OneOrMore,
     ZeroOrOne,
     ZeroOrMore,
-    NTimes(i8, bool),
+    NTimes(i8, Option<i8>, bool),
 }
 
 pub fn lexer(pattern: &str) -> Vec<Token> {
@@ -69,6 +69,7 @@ pub fn get_n_times_match_token(
     tokens: &mut Vec<Token>,
 ) -> Token {
     let mut n = 0;
+    let mut m: Option<i8> = None;
     let mut atleast = false;
 
     while let Some(&ch) = pattern.peek() {
@@ -77,7 +78,7 @@ pub fn get_n_times_match_token(
                 pattern.next();
                 return Token::Quantified {
                     atom: Box::new(tokens.pop().unwrap()),
-                    kind: Quantifier::NTimes(n, atleast),
+                    kind: Quantifier::NTimes(n, m, atleast),
                 };
             }
             ',' => {
@@ -85,7 +86,13 @@ pub fn get_n_times_match_token(
                 pattern.next();
             }
             _ => {
-                n += ch.to_string().parse::<i8>().unwrap();
+                let number = ch.to_string().parse::<i8>().unwrap();
+                if atleast {
+                    atleast = false;
+                    m = Some(number);
+                } else {
+                    n += number;
+                }
                 pattern.next();
             }
         }

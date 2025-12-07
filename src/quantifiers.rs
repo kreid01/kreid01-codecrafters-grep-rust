@@ -90,23 +90,31 @@ pub fn match_n_times(
     pos: usize,
     tokens_after: &[Token],
     n: i8,
+    m: Option<i8>,
     atleast: &bool,
 ) -> Option<usize> {
     let mut end = pos;
-    let mut n = n;
+    let mut nm = match m {
+        Some(m) => m,
+        None => n,
+    };
 
     while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], end)
-        && (n != 0 || atleast == &true)
+        && (nm != 0 || atleast == &true)
     {
         end = next_pos;
-        n -= 1;
+        nm -= 1;
     }
 
-    if n > 0 {
+    if nm > 0 && m.is_none() {
         return None;
     }
 
-    if n == 0 && !atleast {
+    if m.is_some() && nm <= m.unwrap() - n {
+        return Some(end);
+    }
+
+    if nm == 0 && !atleast {
         return Some(end);
     }
 
