@@ -1,4 +1,4 @@
-use crate::character_matcher::match_pattern;
+use crate::grep::match_pattern;
 use crate::lexer::Token;
 use crate::utils::match_token;
 

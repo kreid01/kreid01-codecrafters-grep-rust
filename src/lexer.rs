@@ -15,6 +15,7 @@ pub enum Token {
 pub enum Quantifier {
     OneOrMore,
     ZeroOrOne,
+    ZeroOrMore,
     None,
 }
 
@@ -47,6 +48,10 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
             _ if token == '?' => Token::Quantified {
                 atom: Box::new(tokens.pop().unwrap()),
                 kind: Quantifier::ZeroOrOne,
+            },
+            _ if token == '*' => Token::Quantified {
+                atom: Box::new(tokens.pop().unwrap()),
+                kind: Quantifier::ZeroOrMore,
             },
             _ => Token::Literal(token),
         };

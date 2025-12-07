@@ -4,8 +4,8 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::process;
 
-mod character_matcher;
 mod files;
+mod grep;
 mod lexer;
 mod quantifiers;
 mod sequence;
@@ -67,7 +67,7 @@ fn grep_file(file: &FileContents, pattern: &str, multi: bool) -> bool {
     let mut matched = false;
 
     for line in &file.contents {
-        let matches = character_matcher::grep(line, pattern);
+        let matches = grep::grep(line, pattern);
         if !matches.is_empty() {
             matched = true;
             for _ in matches {
@@ -86,7 +86,7 @@ fn grep_file(file: &FileContents, pattern: &str, multi: bool) -> bool {
 
 fn grep_line(line: &str, pattern: &str, show_matches: bool) -> bool {
     let mut matched = false;
-    let matches = character_matcher::grep(line, pattern);
+    let matches = grep::grep(line, pattern);
     if !matches.is_empty() {
         matched = true;
         if show_matches {

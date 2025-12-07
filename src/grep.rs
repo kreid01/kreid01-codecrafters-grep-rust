@@ -1,5 +1,5 @@
 use crate::lexer::{Quantifier, Token, lexer};
-use crate::quantifiers::{match_one_or_more, match_zero_or_one};
+use crate::quantifiers::{match_one_or_more, match_zero_or_more, match_zero_or_one};
 use crate::sequence::{match_alteration, match_sequence};
 use crate::utils::match_token;
 use std::collections::VecDeque;
@@ -10,7 +10,7 @@ pub fn grep(input: &str, pattern: &str) -> Vec<String> {
     let mut results = Vec::new();
     let mut start_pos = 0;
 
-    while start_pos <= chars.len() {
+    while start_pos < chars.len() {
         let mut tokens_clone = tokens.clone();
 
         if let Some(Token::StartAnchor) = tokens_clone.first() {
@@ -61,6 +61,10 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
                         temp_pos = end_pos
                     }
                 }
+                Quantifier::ZeroOrMore => {
+                    return match_zero_or_more(chars, atom, temp_pos, tokens_after_slice);
+                }
+
                 Quantifier::None => {
                     return None;
                 }
