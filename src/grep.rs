@@ -64,27 +64,19 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
                 Quantifier::ZeroOrMore => {
                     return match_zero_or_more(chars, atom, temp_pos, tokens_after_slice);
                 }
-                Quantifier::NTimes(n, m, atleast) => {
-                    if tokens_after_slice.is_empty() || atleast == &true {
+                Quantifier::NTimes(options) => {
+                    if tokens_after_slice.is_empty() || options.atleast {
                         return match_n_times(
                             chars,
                             atom,
                             temp_pos,
                             tokens_after_slice,
-                            n.to_owned(),
-                            m.to_owned(),
-                            atleast,
+                            options.clone(),
                         );
                     }
-                    if let Some(end_pos) = match_n_times(
-                        chars,
-                        atom,
-                        temp_pos,
-                        tokens_after_slice,
-                        n.to_owned(),
-                        m.to_owned(),
-                        atleast,
-                    ) {
+                    if let Some(end_pos) =
+                        match_n_times(chars, atom, temp_pos, tokens_after_slice, options.clone())
+                    {
                         temp_pos = end_pos
                     }
                 }

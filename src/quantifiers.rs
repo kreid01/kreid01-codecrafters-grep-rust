@@ -1,4 +1,5 @@
 use crate::grep::match_pattern;
+use crate::lexer::NMatch;
 use crate::lexer::Token;
 use crate::utils::match_token;
 
@@ -89,32 +90,30 @@ pub fn match_n_times(
     token: &Token,
     pos: usize,
     tokens_after: &[Token],
-    n: i8,
-    m: Option<i8>,
-    atleast: &bool,
+    options: NMatch,
 ) -> Option<usize> {
     let mut end = pos;
-    let mut nm = match m {
+    let mut range = match options.m {
         Some(m) => m,
-        None => n,
+        None => options.n,
     };
 
     while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], end)
-        && (nm != 0 || atleast == &true)
+        && (range != 0 || options.atleast)
     {
         end = next_pos;
-        nm -= 1;
+        range -= 1;
     }
 
-    if nm > 0 && m.is_none() {
+    if range > 0 && options.m.is_none() {
         return None;
     }
 
-    if m.is_some() && nm <= m.unwrap() - n {
+    if options.m.is_some() && range <= options.m.unwrap() - options.n {
         return Some(end);
     }
 
-    if nm == 0 && !atleast {
+    if range == 0 && !options.atleast {
         return Some(end);
     }
 
