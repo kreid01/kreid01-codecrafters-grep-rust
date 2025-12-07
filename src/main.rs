@@ -24,39 +24,20 @@ fn main() {
         process::exit(1);
     }
 
+    let stdin = io::stdin();
+    let reader = BufReader::new(stdin.lock());
+
     let pattern = env::args().nth(e_index + 1).unwrap();
-    let mut matched = false;
     let file_lines = get_file_lines(e_index);
 
-    if file_lines.is_empty() {
-        let stdin = io::stdin();
-        let reader = BufReader::new(stdin.lock());
-
-        for line in reader.lines() {
-            let line = line.unwrap();
-            let matches = character_matcher::grep(&line, &pattern);
-            if !matches.is_empty() {
-                matched = true;
-                if show_matches {
-                    println!("{}", matches.join("\n"));
-                } else {
-                    println!("{}", line);
-                }
-            }
-        }
-    } else {
-        for line in file_lines {
-            let matches = character_matcher::grep(&line, &pattern);
-            if !matches.is_empty() {
-                matched = true;
-                if show_matches {
-                    println!("{}", matches.join("\n"));
-                } else {
-                    println!("{}", line);
-                }
-            }
-        }
-    }
+    let matched = match file_lines.is_empty() {
+        true => reader
+            .lines()
+            .any(|x| grep_line(&x.unwrap(), &pattern, show_matches)),
+        false => file_lines
+            .iter()
+            .any(|x| grep_line(x, &pattern, show_matches)),
+    };
 
     if matched {
         process::exit(0)
@@ -76,5 +57,20 @@ fn get_file_lines(arg_index: usize) -> Vec<String> {
         }
     }
 
-    return file_lines;
+    file_lines
+}
+
+fn grep_line(line: &str, pattern: &str, show_matches: bool) -> bool {
+    let mut matched = false;
+    let matches = character_matcher::grep(line, pattern);
+    if !matches.is_empty() {
+        matched = true;
+        if show_matches {
+            println!("{}", matches.join("\n"));
+        } else {
+            println!("{}", line);
+        }
+    }
+
+    matched
 }
