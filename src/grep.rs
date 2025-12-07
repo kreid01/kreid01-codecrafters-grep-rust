@@ -81,6 +81,15 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
                     }
                 }
             },
+            Token::Group(token) => {
+                let inner = *token.clone();
+                if tokens_after_slice.is_empty() {
+                    return match_pattern(chars, vec![inner], temp_pos);
+                }
+                if let Some(end_pos) = match_pattern(chars, vec![inner], temp_pos) {
+                    temp_pos = end_pos
+                }
+            }
             Token::Sequence(seq_tokens, negative) => {
                 if tokens_after_slice.is_empty() {
                     return match_sequence(seq_tokens.to_vec(), chars, temp_pos, *negative);
