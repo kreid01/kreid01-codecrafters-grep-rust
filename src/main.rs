@@ -1,5 +1,4 @@
 use std::env;
-use std::fs::File;
 use std::fs::read_to_string;
 use std::io;
 use std::io::BufRead;
@@ -28,15 +27,17 @@ fn main() {
     let reader = BufReader::new(stdin.lock());
 
     let pattern = env::args().nth(e_index + 1).unwrap();
-    let file_lines = get_file_lines(e_index);
+    let file_contents = get_files_contents(e_index);
 
-    let matched = match file_lines.is_empty() {
+    let matched = match file_contents.is_empty() {
         true => reader
             .lines()
-            .any(|x| grep_line(&x.unwrap(), &pattern, show_matches)),
-        false => file_lines
+            .map(|x| grep_line(&x.unwrap(), &pattern, show_matches))
+            .fold(false, |acc, val| acc || val),
+        false => file_contents
             .iter()
-            .any(|x| grep_line(x, &pattern, show_matches)),
+            .map(|x| grep_file(x, &pattern, file_contents.len() > 1))
+            .fold(false, |acc, val| acc || val),
     };
 
     if matched {
@@ -46,18 +47,53 @@ fn main() {
     }
 }
 
-fn get_file_lines(arg_index: usize) -> Vec<String> {
-    let mut file_lines: Vec<String> = Vec::new();
-    if let Some(file) = env::args().nth(arg_index + 2) {
+struct FileContents {
+    file_name: String,
+    contents: Vec<String>,
+}
+
+fn get_files_contents(arg_index: usize) -> Vec<FileContents> {
+    let mut files: Vec<FileContents> = Vec::new();
+    let mut file_index = arg_index + 2;
+
+    while let Some(file) = env::args().nth(file_index) {
         let path = Path::new(&file).to_path_buf();
         if path.is_file()
-            && let Ok(lines) = read_to_string(path)
+            && let Ok(lines) = read_to_string(&path)
         {
-            file_lines = lines.lines().map(|x| x.to_string()).collect();
+            let file_name = path.file_name().unwrap().to_string_lossy().to_string();
+            let contents = lines.lines().map(|x| x.to_string()).collect();
+            let file_contents = FileContents {
+                file_name,
+                contents,
+            };
+            files.push(file_contents)
+        }
+        file_index += 1;
+    }
+
+    files
+}
+
+fn grep_file(file: &FileContents, pattern: &str, multi: bool) -> bool {
+    let mut matched = false;
+
+    for line in &file.contents {
+        let matches = character_matcher::grep(line, pattern);
+        if !matches.is_empty() {
+            matched = true;
+            for m in matches {
+                if multi {
+                    let output = format!("{}:{}", file.file_name, m);
+                    println!("{}", output);
+                } else {
+                    println!("{}", m);
+                }
+            }
         }
     }
 
-    file_lines
+    matched
 }
 
 fn grep_line(line: &str, pattern: &str, show_matches: bool) -> bool {
