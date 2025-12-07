@@ -1,0 +1,51 @@
+use std::env;
+use std::fs::File;
+use std::io;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::process;
+
+mod character_matcher;
+
+fn main() {
+    eprintln!("Logs from your program will appear here!");
+    let mut e_index = 1;
+    let mut show_matches = false;
+
+    if env::args().nth(1).unwrap() == "-o" {
+        show_matches = true;
+        e_index = 2;
+    }
+
+    if env::args().nth(e_index).unwrap() != "-E" {
+        println!("Expected first argument to be '-E'");
+        process::exit(1);
+    }
+
+    let pattern = env::args().nth(e_index + 1).unwrap();
+    let file = env::args().nth(e_index + 2).unwrap();
+    if let Ok(file) = File::open(file) {}
+
+    let stdin = io::stdin();
+    let reader = BufReader::new(stdin.lock());
+    let mut matched = false;
+
+    for line in reader.lines() {
+        let line = line.unwrap();
+        let matches = character_matcher::grep(&line, &pattern);
+        if !matches.is_empty() {
+            matched = true;
+            if show_matches {
+                println!("{}", matches.join("\n"));
+            } else {
+                println!("{}", line);
+            }
+        }
+    }
+
+    if matched {
+        process::exit(0)
+    } else {
+        process::exit(1)
+    }
+}

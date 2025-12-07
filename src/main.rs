@@ -1,7 +1,10 @@
 use std::env;
+use std::fs::File;
+use std::fs::read_to_string;
 use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::path::Path;
 use std::process;
 
 mod character_matcher;
@@ -22,19 +25,35 @@ fn main() {
     }
 
     let pattern = env::args().nth(e_index + 1).unwrap();
-    let stdin = io::stdin();
-    let reader = BufReader::new(stdin.lock());
     let mut matched = false;
+    let file_lines = get_file_lines(e_index);
 
-    for line in reader.lines() {
-        let line = line.unwrap();
-        let matches = character_matcher::grep(&line, &pattern);
-        if !matches.is_empty() {
-            matched = true;
-            if show_matches {
-                println!("{}", matches.join("\n"));
-            } else {
-                println!("{}", line);
+    if file_lines.is_empty() {
+        let stdin = io::stdin();
+        let reader = BufReader::new(stdin.lock());
+
+        for line in reader.lines() {
+            let line = line.unwrap();
+            let matches = character_matcher::grep(&line, &pattern);
+            if !matches.is_empty() {
+                matched = true;
+                if show_matches {
+                    println!("{}", matches.join("\n"));
+                } else {
+                    println!("{}", line);
+                }
+            }
+        }
+    } else {
+        for line in file_lines {
+            let matches = character_matcher::grep(&line, &pattern);
+            if !matches.is_empty() {
+                matched = true;
+                if show_matches {
+                    println!("{}", matches.join("\n"));
+                } else {
+                    println!("{}", line);
+                }
             }
         }
     }
@@ -44,4 +63,18 @@ fn main() {
     } else {
         process::exit(1)
     }
+}
+
+fn get_file_lines(arg_index: usize) -> Vec<String> {
+    let mut file_lines: Vec<String> = Vec::new();
+    if let Some(file) = env::args().nth(arg_index + 2) {
+        let path = Path::new(&file).to_path_buf();
+        if path.is_file()
+            && let Ok(lines) = read_to_string(path)
+        {
+            file_lines = lines.lines().map(|x| x.to_string()).collect();
+        }
+    }
+
+    return file_lines;
 }
