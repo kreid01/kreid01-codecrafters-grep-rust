@@ -1,5 +1,5 @@
 use crate::lexer::{Quantifier, Token, lexer};
-use crate::quantifiers::{match_one_or_more, match_zero_or_more, match_zero_or_one};
+use crate::quantifiers::{match_n_times, match_one_or_more, match_zero_or_more, match_zero_or_one};
 use crate::sequence::{match_alteration, match_sequence};
 use crate::utils::match_token;
 use std::collections::VecDeque;
@@ -64,9 +64,13 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
                 Quantifier::ZeroOrMore => {
                     return match_zero_or_more(chars, atom, temp_pos, tokens_after_slice);
                 }
-
-                Quantifier::None => {
-                    return None;
+                Quantifier::NTimes(n) => {
+                    if tokens_after_slice.is_empty() {
+                        return match_n_times(chars, atom, temp_pos, n.to_owned());
+                    }
+                    if let Some(end_pos) = match_n_times(chars, atom, temp_pos, n.to_owned()) {
+                        temp_pos = end_pos
+                    }
                 }
             },
             Token::Sequence(seq_tokens, negative) => {

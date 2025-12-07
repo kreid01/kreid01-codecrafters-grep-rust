@@ -83,3 +83,21 @@ pub fn match_zero_or_one(
 
     None
 }
+
+pub fn match_n_times(chars: &[char], token: &Token, pos: usize, n: usize) -> Option<usize> {
+    let mut end = pos;
+    let mut n = n;
+
+    while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], end)
+        && n != 0
+    {
+        end = next_pos;
+        n -= 1;
+    }
+
+    if n == 0 {
+        return Some(end);
+    }
+
+    None
+}

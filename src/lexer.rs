@@ -9,6 +9,7 @@ pub enum Token {
     Sequence(Vec<Token>, bool),
     Alternation(Vec<Vec<Token>>),
     Quantified { atom: Box<Token>, kind: Quantifier },
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,7 +17,7 @@ pub enum Quantifier {
     OneOrMore,
     ZeroOrOne,
     ZeroOrMore,
-    None,
+    NTimes(usize),
 }
 
 pub fn lexer(pattern: &str) -> Vec<Token> {
@@ -53,6 +54,7 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
                 atom: Box::new(tokens.pop().unwrap()),
                 kind: Quantifier::ZeroOrMore,
             },
+            _ if token == '{' => get_n_times_match_token(&mut pattern, &mut tokens),
             _ => Token::Literal(token),
         };
 
@@ -60,6 +62,32 @@ pub fn lexer(pattern: &str) -> Vec<Token> {
     }
 
     tokens
+}
+
+pub fn get_n_times_match_token(
+    pattern: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    tokens: &mut Vec<Token>,
+) -> Token {
+    let mut n = 0;
+
+    while let Some(&ch) = pattern.peek() {
+        match ch {
+            '}' => {
+                pattern.next();
+                return Token::Quantified {
+                    atom: Box::new(tokens.pop().unwrap()),
+                    kind: Quantifier::NTimes(n),
+                };
+            }
+
+            _ => {
+                n += ch.to_string().parse::<usize>().unwrap();
+                pattern.next();
+            }
+        }
+    }
+
+    Token::None
 }
 
 pub fn get_sequence_token(pattern: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Token {
