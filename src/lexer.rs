@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     StartAnchor,
@@ -11,7 +9,7 @@ pub enum Token {
     Sequence(Vec<Token>, bool),
     Alternation(Vec<Vec<Token>>),
     Quantified { atom: Box<Token>, kind: Quantifier },
-    Group(Box<Token>),
+    Backref(usize),
     None,
 }
 
@@ -32,15 +30,12 @@ pub struct NMatch {
 
 pub fn lexer(pattern: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
-    let mut groups: VecDeque<Token> = VecDeque::new();
 
     let mut pattern = pattern.chars().peekable();
     while let Some(token) = pattern.next() {
-        let token = match_token(token, &mut pattern, &mut tokens, &mut groups);
+        let token = match_token(token, &mut pattern, &mut tokens);
         tokens.push(token);
     }
-
-    println!("{:?}", tokens);
 
     tokens
 }
@@ -49,7 +44,6 @@ fn match_token(
     token: char,
     pattern: &mut std::iter::Peekable<std::str::Chars<'_>>,
     tokens: &mut Vec<Token>,
-    groups: &mut VecDeque<Token>,
 ) -> Token {
     match token {
         _ if token == '\\' => {
@@ -58,7 +52,12 @@ fn match_token(
                     _ if next_token == 'w' => Token::Word,
                     _ if next_token == 'd' => Token::Digit,
                     _ if next_token.is_numeric() => {
-                        Token::Group(Box::new(groups.pop_back().unwrap()))
+                        let backref_count = tokens
+                            .clone()
+                            .iter()
+                            .filter(|x| matches!(x, Token::Backref(_)))
+                            .count();
+                        Token::Backref(backref_count + 1)
                     }
                     _ => Token::Literal('\\'),
                 }
@@ -66,11 +65,7 @@ fn match_token(
                 Token::Literal('\\')
             }
         }
-        _ if token == '(' => {
-            let group = get_alternator_token(pattern, groups);
-            groups.push_front(group.clone());
-            group
-        }
+        _ if token == '(' => get_alternator_token(pattern),
         _ if token == '[' => get_sequence_token(pattern),
         _ if token == '^' => Token::StartAnchor,
         _ if token == '$' => Token::EndAnchor,
@@ -149,10 +144,7 @@ pub fn get_sequence_token(pattern: &mut std::iter::Peekable<std::str::Chars<'_>>
     Token::Alternation(vec![])
 }
 
-pub fn get_alternator_token(
-    pattern: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    groups: &mut VecDeque<Token>,
-) -> Token {
+pub fn get_alternator_token(pattern: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Token {
     let mut options: Vec<Vec<Token>> = Vec::new();
     let mut branch: Vec<Token> = Vec::new();
 
@@ -170,7 +162,7 @@ pub fn get_alternator_token(
             }
             _ => {
                 pattern.next();
-                let token = match_token(ch, pattern, &mut branch, groups);
+                let token = match_token(ch, pattern, &mut branch);
                 branch.push(token);
             }
         }

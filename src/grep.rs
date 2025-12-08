@@ -2,16 +2,18 @@ use crate::lexer::{Quantifier, Token, lexer};
 use crate::quantifiers::{match_n_times, match_one_or_more, match_zero_or_more, match_zero_or_one};
 use crate::sequence::{match_alteration, match_sequence};
 use crate::utils::match_token;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 pub fn grep(input: &str, pattern: &str) -> Vec<String> {
     let tokens = lexer(pattern);
     let chars: Vec<char> = input.chars().collect();
+
     let mut results = Vec::new();
     let mut start_pos = 0;
 
     while start_pos < chars.len() {
         let mut tokens_clone = tokens.clone();
+        let mut groups: HashMap<usize, String> = HashMap::new();
 
         if let Some(Token::StartAnchor) = tokens_clone.first() {
             if start_pos != 0 {
@@ -20,7 +22,7 @@ pub fn grep(input: &str, pattern: &str) -> Vec<String> {
             tokens_clone.remove(0);
         }
 
-        if let Some(end_pos) = match_pattern(&chars, tokens_clone, start_pos) {
+        if let Some(end_pos) = match_pattern(&chars, tokens_clone, &mut groups, start_pos) {
             results.push(chars[start_pos..end_pos].iter().collect());
             start_pos = end_pos;
         } else {
@@ -31,7 +33,12 @@ pub fn grep(input: &str, pattern: &str) -> Vec<String> {
     results
 }
 
-pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<usize> {
+pub fn match_pattern(
+    chars: &[char],
+    tokens: Vec<Token>,
+    groups: &mut HashMap<usize, String>,
+    pos: usize,
+) -> Option<usize> {
     let mut tokens: VecDeque<Token> = VecDeque::from(tokens);
     let mut temp_pos = pos;
 
@@ -49,20 +56,26 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
             }
             Token::Quantified { atom, kind } => match kind {
                 Quantifier::OneOrMore => {
-                    return match_one_or_more(chars, atom, temp_pos, tokens_after_slice);
+                    return match_one_or_more(chars, atom, temp_pos, tokens_after_slice, groups);
                 }
                 Quantifier::ZeroOrOne => {
                     if tokens_after_slice.is_empty() {
-                        return match_zero_or_one(chars, atom, temp_pos, tokens_after_slice);
+                        return match_zero_or_one(
+                            chars,
+                            atom,
+                            temp_pos,
+                            tokens_after_slice,
+                            groups,
+                        );
                     }
                     if let Some(end_pos) =
-                        match_zero_or_one(chars, atom, temp_pos, tokens_after_slice)
+                        match_zero_or_one(chars, atom, temp_pos, tokens_after_slice, groups)
                     {
                         temp_pos = end_pos
                     }
                 }
                 Quantifier::ZeroOrMore => {
-                    return match_zero_or_more(chars, atom, temp_pos, tokens_after_slice);
+                    return match_zero_or_more(chars, atom, temp_pos, tokens_after_slice, groups);
                 }
                 Quantifier::NTimes(options) => {
                     if tokens_after_slice.is_empty() || options.atleast {
@@ -72,21 +85,27 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
                             temp_pos,
                             tokens_after_slice,
                             options.clone(),
+                            groups,
                         );
                     }
-                    if let Some(end_pos) =
-                        match_n_times(chars, atom, temp_pos, tokens_after_slice, options.clone())
-                    {
+                    if let Some(end_pos) = match_n_times(
+                        chars,
+                        atom,
+                        temp_pos,
+                        tokens_after_slice,
+                        options.clone(),
+                        groups,
+                    ) {
                         temp_pos = end_pos
                     }
                 }
             },
-            Token::Group(token) => {
-                let inner = *token.clone();
+
+            Token::Backref(group) => {
                 if tokens_after_slice.is_empty() {
-                    return match_pattern(chars, vec![inner], temp_pos);
+                    return backreference(chars, groups, group, temp_pos);
                 }
-                if let Some(end_pos) = match_pattern(chars, vec![inner], temp_pos) {
+                if let Some(end_pos) = backreference(chars, groups, group, temp_pos) {
                     temp_pos = end_pos
                 }
             }
@@ -97,14 +116,20 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
                 if let Some(end_pos) =
                     match_sequence(seq_tokens.to_vec(), chars, temp_pos, *negative)
                 {
+                    let group_number = groups.iter().count();
+                    groups.insert(
+                        group_number + 1,
+                        chars[temp_pos..end_pos].iter().collect::<String>(),
+                    );
                     temp_pos = end_pos
                 }
             }
             Token::Alternation(alt_tokens) => {
                 if tokens_after_slice.is_empty() {
-                    return match_alteration(alt_tokens, chars, temp_pos);
+                    return match_alteration(alt_tokens, chars, temp_pos, groups);
                 }
-                if let Some(end_pos) = match_alteration(alt_tokens, chars, temp_pos) {
+                if let Some(end_pos) = match_alteration(alt_tokens, chars, temp_pos, groups) {
+                    groups.insert(1, chars[temp_pos..end_pos].iter().collect::<String>());
                     temp_pos = end_pos
                 }
             }
@@ -122,4 +147,25 @@ pub fn match_pattern(chars: &[char], tokens: Vec<Token>, pos: usize) -> Option<u
     }
 
     Some(temp_pos)
+}
+
+fn backreference(
+    chars: &[char],
+    groups: &HashMap<usize, String>,
+    group: &usize,
+    pos: usize,
+) -> Option<usize> {
+    if let Some(reference) = groups.get(group) {
+        if chars[pos..]
+            .iter()
+            .collect::<String>()
+            .starts_with(reference)
+        {
+            return Some(pos + reference.len());
+        } else {
+            return None;
+        }
+    }
+
+    None
 }

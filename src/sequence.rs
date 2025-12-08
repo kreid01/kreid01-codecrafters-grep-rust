@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::grep::match_pattern;
 use crate::lexer::Token;
 use crate::utils::match_token;
@@ -31,9 +33,10 @@ pub fn match_alteration(
     alt_tokens: &[Vec<Token>],
     chars: &[char],
     start_pos: usize,
+    groups: &mut HashMap<usize, String>,
 ) -> Option<usize> {
     for branch in alt_tokens {
-        if let Some(end_pos) = match_pattern(chars, branch.to_vec(), start_pos) {
+        if let Some(end_pos) = match_pattern(chars, branch.to_vec(), groups, start_pos) {
             return Some(end_pos);
         }
     }

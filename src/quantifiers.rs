@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::grep::match_pattern;
 use crate::lexer::NMatch;
 use crate::lexer::Token;
@@ -8,14 +10,12 @@ pub fn match_one_or_more(
     token: &Token,
     pos: usize,
     tokens_after: &[Token],
+    groups: &mut HashMap<usize, String>,
 ) -> Option<usize> {
     let mut end = pos;
 
-    while let Some(&c) = chars.get(end) {
-        if !match_token(token, &c) {
-            break;
-        }
-        end += 1;
+    while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], groups, end) {
+        end = next_pos
     }
 
     if end == pos {
@@ -27,7 +27,7 @@ pub fn match_one_or_more(
     }
 
     for candidate in (pos..=end).rev() {
-        if let Some(next_pos) = match_pattern(chars, tokens_after.to_vec(), candidate) {
+        if let Some(next_pos) = match_pattern(chars, tokens_after.to_vec(), groups, candidate) {
             return Some(next_pos);
         }
     }
@@ -40,10 +40,11 @@ pub fn match_zero_or_more(
     token: &Token,
     pos: usize,
     tokens_after: &[Token],
+    groups: &mut HashMap<usize, String>,
 ) -> Option<usize> {
     let mut end = pos;
 
-    while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], end) {
+    while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], groups, end) {
         end = next_pos
     }
 
@@ -52,7 +53,7 @@ pub fn match_zero_or_more(
     }
 
     for candidate in (pos..=end).rev() {
-        if let Some(next_pos) = match_pattern(chars, tokens_after.to_vec(), candidate) {
+        if let Some(next_pos) = match_pattern(chars, tokens_after.to_vec(), groups, candidate) {
             return Some(next_pos);
         }
     }
@@ -65,6 +66,7 @@ pub fn match_zero_or_one(
     token: &Token,
     pos: usize,
     tokens_after: &[Token],
+    groups: &mut HashMap<usize, String>,
 ) -> Option<usize> {
     if pos >= chars.len() {
         return Some(pos);
@@ -78,7 +80,7 @@ pub fn match_zero_or_one(
         return Some(pos);
     }
 
-    if let Some(pos) = match_pattern(chars, tokens_after.to_vec(), pos + 1) {
+    if let Some(pos) = match_pattern(chars, tokens_after.to_vec(), groups, pos + 1) {
         return Some(pos);
     }
 
@@ -91,6 +93,7 @@ pub fn match_n_times(
     pos: usize,
     tokens_after: &[Token],
     options: NMatch,
+    groups: &mut HashMap<usize, String>,
 ) -> Option<usize> {
     let mut end = pos;
     let mut range = match options.m {
@@ -98,7 +101,7 @@ pub fn match_n_times(
         None => options.n,
     };
 
-    while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], end)
+    while let Some(next_pos) = match_pattern(chars, vec![token.to_owned()], groups, end)
         && (range != 0 || options.atleast)
     {
         end = next_pos;
@@ -122,7 +125,7 @@ pub fn match_n_times(
     }
 
     for candidate in (pos..=end).rev() {
-        if let Some(next_pos) = match_pattern(chars, tokens_after.to_vec(), candidate) {
+        if let Some(next_pos) = match_pattern(chars, tokens_after.to_vec(), groups, candidate) {
             return Some(next_pos);
         }
     }
