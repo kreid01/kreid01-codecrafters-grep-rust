@@ -116,11 +116,6 @@ pub fn match_pattern(
                 if let Some(end_pos) =
                     match_sequence(seq_tokens.to_vec(), chars, temp_pos, *negative)
                 {
-                    let group_number = groups.iter().count();
-                    groups.insert(
-                        group_number + 1,
-                        chars[temp_pos..end_pos].iter().collect::<String>(),
-                    );
                     temp_pos = end_pos
                 }
             }
@@ -129,7 +124,11 @@ pub fn match_pattern(
                     return match_alteration(alt_tokens, chars, temp_pos, groups);
                 }
                 if let Some(end_pos) = match_alteration(alt_tokens, chars, temp_pos, groups) {
-                    groups.insert(1, chars[temp_pos..end_pos].iter().collect::<String>());
+                    let group_number = groups.iter().count();
+                    groups.insert(
+                        group_number + 1,
+                        chars[temp_pos..end_pos].iter().collect::<String>(),
+                    );
                     temp_pos = end_pos
                 }
             }
